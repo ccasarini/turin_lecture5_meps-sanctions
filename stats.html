@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MEP Sanctions Statistics</title>
+    <!-- Bootstrap and custom styling -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-body: #fdfdfd;
+            --text-main: #2c3e50;
+            --text-muted: #7f8c8d;
+            --primary: #3498db;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            padding: 4rem 1rem;
+        }
+
+        .stats-container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .nav-link {
+            text-decoration: none;
+            color: var(--primary);
+            font-size: 0.9rem;
+            margin-bottom: 2rem;
+            display: inline-block;
+        }
+
+        h1 { font-weight: 300; margin-bottom: 2.5rem; }
+
+        .stat-card {
+            background: white;
+            border: 1px solid #f1f1f1;
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+            margin-bottom: 2rem;
+        }
+
+        .stat-card h5 {
+            font-size: 1rem;
+            color: var(--text-muted);
+            margin-bottom: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+
+        .grid-stats {
+            display: grid;
+            grid-template-columns: 1fr 1.5fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 992px) {
+            .grid-stats { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="stats-container">
+    <a href="index.html" class="nav-link">← Back to Reviewer</a>
+    <h1>Data Insights</h1>
+
+    <div class="grid-stats">
+        <!-- Hit Ratio Chart -->
+        <div class="stat-card">
+            <h5>Sanctions Hit Ratio</h5>
+            <div class="chart-container">
+                <canvas id="hitRatioChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Hits by Country Chart -->
+        <div class="stat-card">
+            <h5>Potential Hits by Country</h5>
+            <div class="chart-container">
+                <canvas id="countryHitsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hits by Political Group -->
+    <div class="stat-card">
+        <h5>Potential Hits by Political Group</h5>
+        <div class="chart-container" style="height: 400px;">
+            <canvas id="groupHitsChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    const csvUrl = 'mep_sanctions_results.csv';
+
+    Papa.parse(csvUrl, {
+        download: true,
+        header: true,
+        complete: function(results) {
+            const data = results.data.filter(row => row.Name && row.Name.trim() !== "");
+            generateCharts(data);
+        }
+    });
+
+    function generateCharts(data) {
+        // 1. Data Processing
+        const total = data.length;
+        const hits = data.filter(mep => mep['Sanctions Match'] === 'YES').length;
+        const clears = total - hits;
+
+        const countryHits = {};
+        const groupHits = {};
+
+        data.forEach(mep => {
+            if (mep['Sanctions Match'] === 'YES') {
+                const country = mep.Country || 'Unknown';
+                const group = mep['Political Group'] || 'Unknown';
+                countryHits[country] = (countryHits[country] || 0) + 1;
+                groupHits[group] = (groupHits[group] || 0) + 1;
+            }
+        });
+
+        // 2. Hit Ratio Chart (Pie)
+        new Chart(document.getElementById('hitRatioChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Potential Hits', 'Clear'],
+                datasets: [{
+                    data: [hits, clears],
+                    backgroundColor: ['#fbc02d', '#27ae60'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } }
+            }
+        });
+
+        // 3. Country Hits Chart (Horizontal Bar)
+        const sortedCountries = Object.entries(countryHits).sort((a, b) => b[1] - a[1]);
+        new Chart(document.getElementById('countryHitsChart'), {
+            type: 'bar',
+            data: {
+                labels: sortedCountries.map(c => c[0]),
+                datasets: [{
+                    label: 'Number of Potential Hits',
+                    data: sortedCountries.map(c => c[1]),
+                    backgroundColor: '#3498db',
+                    borderRadius: 8
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: { x: { grid: { display: false }, ticks: { precision: 0 } }, y: { grid: { display: false } } }
+            }
+        });
+
+        // 4. Political Group Hits Chart (Bar)
+        const sortedGroups = Object.entries(groupHits).sort((a, b) => b[1] - a[1]);
+        new Chart(document.getElementById('groupHitsChart'), {
+            type: 'bar',
+            data: {
+                labels: sortedGroups.map(g => g[0]),
+                datasets: [{
+                    label: 'Potential Hits',
+                    data: sortedGroups.map(g => g[1]),
+                    backgroundColor: '#9b59b6',
+                    borderRadius: 8
+                }]
+            },
+            options: {
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: { x: { grid: { display: false } }, y: { grid: { display: false }, ticks: { precision: 0 } } }
+            }
+        });
+    }
+</script>
+
+</body>
+</html>
