@@ -85,12 +85,20 @@
             </div>
         </div>
 
-        <!-- Hits by Country Chart -->
+        <!-- Hits by Role Chart -->
         <div class="stat-card">
-            <h5>Potential Hits by Country</h5>
+            <h5>Committee Role Distribution</h5>
             <div class="chart-container">
-                <canvas id="countryHitsChart"></canvas>
+                <canvas id="roleChart"></canvas>
             </div>
+        </div>
+    </div>
+
+    <!-- Hits by Country Chart -->
+    <div class="stat-card">
+        <h5>Potential Hits by Country</h5>
+        <div class="chart-container">
+            <canvas id="countryHitsChart"></canvas>
         </div>
     </div>
 
@@ -127,8 +135,13 @@
 
         const countryHits = {};
         const groupHits = {};
+        const roleDistribution = {};
 
         data.forEach(mep => {
+            // Count roles for all MEPs
+            const role = mep.Role || 'Member';
+            roleDistribution[role] = (roleDistribution[role] || 0) + 1;
+
             if (mep['Sanctions Match'] === 'YES') {
                 const country = mep.Country || 'Unknown';
                 const group = mep['Political Group'] || 'Unknown';
@@ -154,7 +167,24 @@
             }
         });
 
-        // 3. Country Hits Chart (Horizontal Bar)
+        // 3. Role Distribution Chart (Pie/Doughnut)
+        new Chart(document.getElementById('roleChart'), {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(roleDistribution),
+                datasets: [{
+                    data: Object.values(roleDistribution),
+                    backgroundColor: ['#e74c3c', '#3498db', '#9b59b6', '#2ecc71', '#f1c40f'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } }
+            }
+        });
+
+        // 4. Country Hits Chart (Horizontal Bar)
         const sortedCountries = Object.entries(countryHits).sort((a, b) => b[1] - a[1]);
         new Chart(document.getElementById('countryHitsChart'), {
             type: 'bar',
@@ -175,7 +205,7 @@
             }
         });
 
-        // 4. Political Group Hits Chart (Bar)
+        // 5. Political Group Hits Chart (Bar)
         const sortedGroups = Object.entries(groupHits).sort((a, b) => b[1] - a[1]);
         new Chart(document.getElementById('groupHitsChart'), {
             type: 'bar',

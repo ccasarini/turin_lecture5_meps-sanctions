@@ -4,54 +4,58 @@ import csv
 import time
 
 # --- STEP 1: SETTING UP THE ADDRESSES ---
-# This is the main page where all the committee members are listed.
 BASE_URL = "https://www.europarl.europa.eu"
 COMMITTEE_URL = "https://www.europarl.europa.eu/committees/en/droi/home/members"
 
 def scrape_meps():
     print(f"Starting to fetch members from: {COMMITTEE_URL}")
     
-    # --- STEP 2: GETTING THE MAIN LIST ---
-    # We ask the website for the page content.
     response = requests.get(COMMITTEE_URL)
     if response.status_code != 200:
         print("Failed to load the committee page.")
         return
 
-    # We use BeautifulSoup to "read" the HTML code of the page.
     soup = BeautifulSoup(response.text, 'html.parser')
     
-    # We look for all the links that point to MEP profiles.
-    # In the current website structure, these are often inside specific 'a' tags.
-    # Note: Website structures change, so we target common MEP link patterns.
-    mep_links = []
-    for a in soup.find_all('a', href=True):
-        if '/meps/en/' in a['href'] and '/home' not in a['href']:
-            # Construct the full URL without forcing '/home' suffix which can cause 404s
-            full_url = a['href'] if a['href'].startswith('http') else BASE_URL + a['href']
-            if full_url not in mep_links:
-                mep_links.append(full_url)
+    # We find all member blocks
+    member_items = soup.find_all('div', class_='es_member-list-item')
+    print(f"Found {len(member_items)} members on the committee page.")
 
-    print(f"Found {len(mep_links)} potential MEP profile links.")
-
-    # --- STEP 3: PREPARING THE EXCEL-LIKE FILE (CSV) ---
+    # --- STEP 2: PREPARING THE CSV FILE ---
     with open('mep_data.csv', 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
-        writer.writerow(["Name", "Country", "Political Group", "National Party", "Profile URL"])
+        writer.writerow(["Name", "Country", "Political Group", "National Party", "Role", "Profile URL"])
 
-        # --- STEP 4: VISITING EACH PROFILE ---
-        for link in mep_links:
+        # --- STEP 3: PROCESSING EACH MEMBER ---
+        for item in member_items:
             try:
-                print(f"Scraping profile: {link}")
-                mep_response = requests.get(link)
+                # Get basic info from the main committee page
+                name_div = item.find('div', class_='es_title-h4')
+                name = name_div.get_text(strip=True) if name_div else "N/A"
+                
+                link_tag = item.find('a', href=True)
+                profile_link = link_tag['href'] if link_tag else ""
+                if profile_link and not profile_link.startswith('http'):
+                    profile_link = BASE_URL + profile_link
+
+                # Get additional info (Role, Political Group, Country)
+                info_spans = item.find_all('span', class_='sln-additional-info')
+                info_texts = [span.get_text(strip=True) for span in info_spans]
+                
+                # Logic to identify role
+                role = "Member" # Default
+                for text in info_texts:
+                    if "Chair" in text:
+                        role = text
+                        break
+                
+                print(f"Scraping profile for: {name} (Role: {role})")
+                
+                # Now visit the profile page for the rest of the data
+                mep_response = requests.get(profile_link)
                 mep_soup = BeautifulSoup(mep_response.text, 'html.parser')
 
-                # --- STEP 5: EXTRACTING THE DATA ---
-                # Improved selectors based on current website structure
-                name_span = mep_soup.find('span', class_='sln-member-name')
-                name = name_span.get_text(strip=True) if name_span else "N/A"
-                
-                # Country and National Party are often in a div with es_title-h3
+                # Country and National Party
                 country_party_div = mep_soup.find('div', class_='es_title-h3')
                 if country_party_div:
                     text = country_party_div.get_text(strip=True)
@@ -69,17 +73,16 @@ def scrape_meps():
                 group_h3 = mep_soup.find('h3', class_='sln-political-group-name')
                 political_group = group_h3.get_text(strip=True) if group_h3 else "N/A"
 
-                # --- STEP 6: SAVING THE DATA ---
-                writer.writerow([name, country, political_group, national_party, mep_response.url])
+                # Save the data
+                writer.writerow([name, country, political_group, national_party, role, mep_response.url])
 
-                # --- STEP 7: BEING POLITE ---
-                # We wait 1 second between pages so we don't overwhelm the website.
+                # Wait a bit
                 time.sleep(1)
 
             except Exception as e:
-                print(f"Could not scrape {link} because of an error: {e}")
+                print(f"Could not scrape member because of an error: {e}")
 
-    print("Finished! All data has been saved to 'mep_data.csv'.")
+    print("Finished! All data with roles has been saved to 'mep_data.csv'.")
 
 if __name__ == "__main__":
     scrape_meps()

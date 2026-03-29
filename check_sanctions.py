@@ -116,7 +116,7 @@ def screen_meps():
 
     # --- STEP 5: SAVE THE RESULTS TO A NEW FILE ---
     # We create a new file so we don't overwrite your original data.
-    fieldnames = ["Name", "Country", "Political Group", "National Party", "Profile URL", "Sanctions Match", "Match Name", "Match Score"]
+    fieldnames = ["Name", "Country", "Political Group", "National Party", "Role", "Profile URL", "Sanctions Match", "Match Name", "Match Score"]
     
     with open('mep_sanctions_results.csv', mode='w', newline='', encoding='utf-8') as outfile:
         writer = csv.DictWriter(outfile, fieldnames=fieldnames)
