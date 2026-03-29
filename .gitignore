@@ -1,0 +1,11 @@
+# Ignore environment variables (sensitive keys)
+.env
+
+# Ignore generated data files (optional, but good practice)
+# mep_data.csv
+# mep_sanctions_results.csv
+
+# Ignore Python cache
+__pycache__/
+*.py[cod]
+*$py.class
