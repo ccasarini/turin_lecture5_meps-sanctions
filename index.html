@@ -8,12 +8,19 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background-color: #f8f9fa; padding-top: 50px; padding-bottom: 50px; }
-        .container { max-width: 1000px; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .match-yes { color: #d9534f; font-weight: bold; background-color: #f9d6d5 !important; }
+        .container { max-width: 1200px; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .match-yes { background-color: #fff3f3 !important; }
         .match-no { color: #5cb85c; }
         .table-responsive { margin-top: 20px; }
         .search-box { margin-bottom: 20px; }
         .badge-pep { background-color: #ffc107; color: #000; font-size: 0.8rem; }
+        
+        /* Decision Styles */
+        .status-approved { background-color: #d4edda !important; }
+        .status-rejected { background-color: #f8d7da !important; }
+        .status-pending { background-color: white; }
+        
+        .btn-group-sm > .btn { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
     </style>
 </head>
 <body>
@@ -21,13 +28,18 @@
 <div class="container">
     <h2 class="text-center mb-4">🇪🇺 MEP Sanctions Reviewer</h2>
     <p class="text-muted text-center">
-        This tool helps you review the results of the OpenSanctions screening.
-        <br><strong>Note:</strong> Most "YES" matches for MEPs are because they are <em>Politically Exposed Persons (PEPs)</em>, not necessarily sanctioned.
+        Review each row and choose to <strong>Approve</strong> or <strong>Reject</strong>.
+        <br><small>Your decisions are saved in your browser (LocalStorage).</small>
     </p>
 
-    <!-- Search Box -->
-    <div class="search-box">
-        <input type="text" id="searchInput" class="form-control form-control-lg" placeholder="Search by name, country, or party...">
+    <!-- Search Box and Controls -->
+    <div class="row search-box align-items-center">
+        <div class="col-md-8">
+            <input type="text" id="searchInput" class="form-control form-control-lg" placeholder="Search by name, country, or party...">
+        </div>
+        <div class="col-md-4 text-end">
+            <button class="btn btn-outline-secondary" onclick="clearAllReviews()">Reset All Decisions</button>
+        </div>
     </div>
 
     <!-- Table -->
@@ -40,12 +52,13 @@
                     <th>Sanctions Match?</th>
                     <th>Match Details</th>
                     <th>Score</th>
+                    <th>Decision</th>
                     <th>Link</th>
                 </tr>
             </thead>
             <tbody id="mepTableBody">
                 <tr>
-                    <td colspan="6" class="text-center py-4">Loading data...</td>
+                    <td colspan="7" class="text-center py-4">Loading data...</td>
                 </tr>
             </tbody>
         </table>
@@ -58,19 +71,19 @@
 <script>
     const csvUrl = 'mep_sanctions_results.csv';
     let mepData = [];
+    let userDecisions = JSON.parse(localStorage.getItem('mep_decisions')) || {};
 
     // 1. Fetch and Parse the CSV file
     Papa.parse(csvUrl, {
         download: true,
         header: true,
         complete: function(results) {
-            // Remove empty rows and handle potential parsing issues
             mepData = results.data.filter(row => row.Name && row.Name.trim() !== ""); 
             displayData(mepData);
         },
         error: function(err) {
             console.error("Error loading CSV:", err);
-            document.getElementById('mepTableBody').innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error loading data. Make sure mep_sanctions_results.csv exists!</td></tr>';
+            document.getElementById('mepTableBody').innerHTML = '<tr><td colspan="7" class="text-center text-danger">Error loading data. Make sure mep_sanctions_results.csv exists!</td></tr>';
         }
     });
 
@@ -80,27 +93,40 @@
         tbody.innerHTML = '';
 
         if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4">No results found matching your search.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4">No results found matching your search.</td></tr>';
             return;
         }
 
         data.forEach(mep => {
+            const mepId = mep.Name; // Use Name as a simple ID
+            const decision = userDecisions[mepId] || 'pending';
+            
+            let rowClass = '';
+            if (decision === 'approved') rowClass = 'status-approved';
+            else if (decision === 'rejected') rowClass = 'status-rejected';
+            else if (mep['Sanctions Match'] === 'YES') rowClass = 'match-yes';
+
             const isMatch = mep['Sanctions Match'] === 'YES';
-            const matchClass = isMatch ? 'match-yes' : '';
             const matchText = isMatch ? '⚠️ YES' : '✅ No';
             
             const row = `
-                <tr class="${matchClass}">
+                <tr id="row-${mepId.replace(/\s+/g, '-')}" class="${rowClass}">
                     <td><strong>${mep.Name}</strong></td>
                     <td class="text-center">${mep.Country}</td>
                     <td class="text-center font-monospace">${matchText}</td>
                     <td>
-                        <div>${mep['Match Name'] || 'N/A'}</div>
-                        ${isMatch ? '<span class="badge badge-pep">Potential PEP Hit</span>' : ''}
+                        <small>${mep['Match Name'] || 'N/A'}</small>
+                        ${isMatch ? '<br><span class="badge badge-pep">Potential PEP Hit</span>' : ''}
                     </td>
                     <td class="text-center">${mep['Match Score'] || '0'}</td>
                     <td class="text-center">
-                        <a href="${mep['Profile URL']}" target="_blank" class="btn btn-sm btn-primary">Profile</a>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn ${decision === 'approved' ? 'btn-success' : 'btn-outline-success'}" onclick="makeDecision('${mepId}', 'approved')">Approve</button>
+                            <button type="button" class="btn ${decision === 'rejected' ? 'btn-danger' : 'btn-outline-danger'}" onclick="makeDecision('${mepId}', 'rejected')">Reject</button>
+                        </div>
+                    </td>
+                    <td class="text-center">
+                        <a href="${mep['Profile URL']}" target="_blank" class="btn btn-sm btn-link p-0">Profile</a>
                     </td>
                 </tr>
             `;
@@ -108,13 +134,33 @@
         });
     }
 
-    // 3. Search functionality (Filters as you type)
+    // 3. Handle Decisions
+    function makeDecision(mepId, decision) {
+        // Toggle if clicking same button
+        if (userDecisions[mepId] === decision) {
+            delete userDecisions[mepId];
+        } else {
+            userDecisions[mepId] = decision;
+        }
+        
+        localStorage.setItem('mep_decisions', JSON.stringify(userDecisions));
+        displayData(mepData); // Refresh table
+    }
+
+    function clearAllReviews() {
+        if (confirm("Are you sure you want to clear all your approval/rejection decisions?")) {
+            userDecisions = {};
+            localStorage.removeItem('mep_decisions');
+            displayData(mepData);
+        }
+    }
+
+    // 4. Search functionality
     document.getElementById('searchInput').addEventListener('input', function(e) {
         const searchTerm = e.target.value.toLowerCase();
         const filteredData = mepData.filter(mep => 
             (mep.Name && mep.Name.toLowerCase().includes(searchTerm)) ||
-            (mep.Country && mep.Country.toLowerCase().includes(searchTerm)) ||
-            (mep['National Party'] && mep['National Party'].toLowerCase().includes(searchTerm))
+            (mep.Country && mep.Country.toLowerCase().includes(searchTerm))
         );
         displayData(filteredData);
     });
